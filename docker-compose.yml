@@ -2,9 +2,7 @@ services:
   tc:
     image: "${DOCKER_IMAGE_TERMINAL:-ethanvdh/docker-tc}"
     container_name: docker-tc
-    cap_add:
-      - SYS_ADMIN
-      - NET_ADMIN
+    privileged: true
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     deploy:
