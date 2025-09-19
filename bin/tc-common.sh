@@ -21,9 +21,14 @@ qdisc_netm() {
     qdisc_next
 }
 # http://man7.org/linux/man-pages/man8/tc-tbf.8.html
-qdisc_tbf() {
+qdisc_tbf_ingress() {
     IF="$1"
     shift
-    tc qdisc add dev "$IF" $QDISC_HANDLE tbf burst 5kb latency 50ms $@
+    tc qdisc add dev "$IF" $QDISC_HANDLE tbf burst 50kb latency 50ms $@
     qdisc_next
+}
+qdisc_tbf_egress() {
+    PID="$1"
+    shift
+    nsenter --target $PID --net  -- tc qdisc add dev eth0 root tbf burst 50kb latency 50ms $@
 }

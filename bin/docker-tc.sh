@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-. /docker-tc/bin/core.sh
-. /docker-tc/bin/docker-common.sh
-. /docker-tc/bin/tc-common.sh
+. /docker-tc/docker-common.sh
+. /docker-tc/tc-common.sh
 set -e
 log() {
     echo "[$(date -Is)] [$CONTAINER_ID] $*"
 }
+
+BASE_LABEL="com.docker-tc"
+
 while read DOCKER_EVENT; do
     # docker events
     CONTAINER_ID=$(echo "$DOCKER_EVENT" | cut -d' ' -f4)
@@ -21,17 +23,12 @@ while read DOCKER_EVENT; do
         # could have used docker_id_long_to_short although it is less safe
         CONTAINER_ID=$(docker_container_get_short_id "$CONTAINER_ID")
     fi
-    if is_locked "$CONTAINER_ID"; then
-        continue
-    fi
     docker_container_labels_load "$CONTAINER_ID"
     if [[ "$(docker_container_labels_get "$BASE_LABEL.enabled")" == "0" ]]; then
-        lock "$CONTAINER_ID"
         log "Notice: Skipping container, service was disabled by label"
         continue
     fi
     if [[ "$(docker_container_labels_get "$BASE_LABEL.enabled")" != "1" ]]; then
-        lock "$CONTAINER_ID"
         log "Notice: Skipping container, no valid labels found"
         continue
     fi
@@ -43,11 +40,11 @@ while read DOCKER_EVENT; do
         NETWORK_INTERFACE_NAMES=$(docker_container_interfaces_in_network "$CONTAINER_ID" "$NETWORK_NAME")
         if [ -z "$NETWORK_INTERFACE_NAMES" ]; then
             log "Warning: Network has no corresponding virtual network interface"
-            lock "$CONTAINER_ID"
             continue
         fi
         while IFS= read -r NETWORK_INTERFACE_NAME; do
-            LIMIT=$(docker_container_labels_get "$BASE_LABEL.limit")
+            LIMIT_INGRESS=$(docker_container_labels_get "$BASE_LABEL.limit_ingress")
+            LIMIT_EGRESS=$(docker_container_labels_get "$BASE_LABEL.limit_egress")
             DELAY=$(docker_container_labels_get "$BASE_LABEL.delay")
             LOSS=$(docker_container_labels_get "$BASE_LABEL.loss")
             CORRUPT=$(docker_container_labels_get "$BASE_LABEL.corrupt")
@@ -71,11 +68,15 @@ while read DOCKER_EVENT; do
             OPTIONS_LOG=$(echo "$OPTIONS_LOG" | sed 's/[, ]*$//')
             log "Set ${OPTIONS_LOG} on $NETWORK_INTERFACE_NAME"
             qdisc_netm "$NETWORK_INTERFACE_NAME" $NETM_OPTIONS
-            if [ ! -z "$LIMIT" ]; then
-                log "Set bandwidth-limit=$LIMIT on $NETWORK_INTERFACE_NAME"
-                qdisc_tbf "$NETWORK_INTERFACE_NAME" rate "$LIMIT"
+            if [ ! -z "$LIMIT_INGRESS" ]; then
+                log "Set ingress bandwidth limit to $LIMIT_INGRESS on $NETWORK_INTERFACE_NAME"
+                qdisc_tbf_ingress "$NETWORK_INTERFACE_NAME" rate "$LIMIT_INGRESS"
             fi
-            lock "$CONTAINER_ID"
+            if [ ! -z "$LIMIT_EGRESS" ]; then
+                log "Set egress bandwidth limit to $LIMIT_EGRESS on $NETWORK_INTERFACE_NAME"
+                CONTAINER_PID=$(docker_container_get_pid "$CONTAINER_ID")
+                qdisc_tbf_egress "$CONTAINER_PID" rate "$LIMIT_EGRESS"
+            fi
             log "Controlling traffic of the container $(docker_container_get_name "$CONTAINER_ID") on $NETWORK_INTERFACE_NAME"
         done < <(echo -e "$NETWORK_INTERFACE_NAMES")
     done < <(echo -e "$NETWORK_NAMES")

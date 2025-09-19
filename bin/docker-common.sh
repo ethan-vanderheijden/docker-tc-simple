@@ -65,3 +65,6 @@ docker_container_labels_load() {
 docker_container_labels_get() {
     jq -r ".[\"$1\"] | select (. != null)" <(echo "$CONTAINER_LABELS")
 }
+docker_container_get_pid() {
+    docker inspect --format '{{ .State.Pid }}' "$1"
+}

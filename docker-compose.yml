@@ -1,24 +1,15 @@
-version: '3.7'
-
 services:
   tc:
-    image: "${DOCKER_IMAGE_TERMINAL:-lukaszlach/docker-tc}"
+    image: "${DOCKER_IMAGE_TERMINAL:-ethanvdh/docker-tc}"
     container_name: docker-tc
     cap_add:
+      - SYS_ADMIN
       - NET_ADMIN
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /var/docker-tc:/var/docker-tc
     deploy:
       mode: global
       restart_policy:
         condition: any
-    environment:
-      HTTP_BIND: "${HTTP_BIND:-127.0.0.1}"
-      HTTP_PORT: "${HTTP_PORT:-4080}"
     network_mode: host
-
-networks:
-  default:
-    external:
-      name: host
+    pid: host
